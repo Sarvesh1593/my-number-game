@@ -10,7 +10,7 @@ const Stack = createNativeStackNavigator ();
 export default function App() {
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName='WelcomeScreen'>
+      <Stack.Navigator screenOptions={{headerShown : false}} initialRouteName='WelcomeScreen'>
 
         <Stack.Screen name='WelcomeScreen' component={WelcomeScreen}/>
         <Stack.Screen name='Game' component={GameScreen}/>

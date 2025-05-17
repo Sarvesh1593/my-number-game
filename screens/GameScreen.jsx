@@ -1,12 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, Button, StyleSheet, Animated, TouchableOpacity } from 'react-native';
+import { View, Text, Button, StyleSheet, Animated } from 'react-native';
 
 const TOTAL_ROUNDS = 3;
+const ROWS = 4;
+const COLS = 4;
+const TOTAL_CELLS = ROWS * COLS;
 
 const generateRandomSet = () => {
   const allNumbers = Array.from({ length: 30 }, (_, i) => i + 1);
   const shuffled = allNumbers.sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, 9);
+  const randomCount = Math.floor(Math.random() * 7) + 10; // 10 to 16 numbers
+  return shuffled.slice(0, randomCount);
 };
 
 const GameScreen = ({ navigation }) => {
@@ -15,8 +19,12 @@ const GameScreen = ({ navigation }) => {
   const [userResponses, setUserResponses] = useState([]);
   const [animationCompleted, setAnimationCompleted] = useState(false);
 
-  // Animation values for each number
-  const fadeAnim = useRef(numberSets.map(() => new Animated.Value(0))).current;
+  // Animation values for all 16 cells
+  const fadeAnim = useRef(
+    Array(TOTAL_CELLS)
+      .fill(0)
+      .map(() => new Animated.Value(0))
+  ).current;
 
   useEffect(() => {
     const sets = Array.from({ length: TOTAL_ROUNDS }, generateRandomSet);
@@ -24,23 +32,32 @@ const GameScreen = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
-    if (numberSets.length > 0) {
-      // Staggered animation for each number
-      const animations = fadeAnim.map((anim, index) =>
-        Animated.timing(anim, {
-          toValue: 1, // Fade to full opacity
-          duration: 500, // Duration of the fade-in
-          delay: index * 300,  // Staggered delay based on index
+    if (numberSets.length === 0) return;
+
+    // Reset animation
+    fadeAnim.forEach((anim) => anim.setValue(0));
+    setAnimationCompleted(false);
+
+    // Animate only existing numbers, sequentially
+    const currentSet = numberSets[currentRound];
+    const count = Math.min(currentSet.length, TOTAL_CELLS);
+
+    const animations = [];
+    for (let i = 0; i < count; i++) {
+      animations.push(
+        Animated.timing(fadeAnim[i], {
+          toValue: 1,
+          duration: 400,
+          delay: i * 150,
           useNativeDriver: true,
         })
       );
-
-      // Start all animations with stagger effect
-      Animated.stagger(300, animations).start(() => {
-        setAnimationCompleted(true); // Mark animation as complete
-      });
     }
-  }, [numberSets]);
+
+    Animated.stagger(150, animations).start(() => {
+      setTimeout(() => setAnimationCompleted(true), 1000);
+    });
+  }, [currentRound, numberSets]);
 
   const handleAnswer = (isPresent) => {
     const updatedResponses = [...userResponses, isPresent];
@@ -49,7 +66,8 @@ const GameScreen = ({ navigation }) => {
       const guessedNumber = calculateResult(numberSets, updatedResponses);
       navigation.navigate('Result', { guessedNumber });
     } else {
-      setCurrentRound(currentRound + 1);
+      setCurrentRound((prev) => prev + 1);
+      setAnimationCompleted(false);
     }
 
     setUserResponses(updatedResponses);
@@ -64,43 +82,57 @@ const GameScreen = ({ navigation }) => {
         });
       }
     });
+
     const sorted = Object.entries(possibleNumbers).sort((a, b) => b[1] - a[1]);
     return sorted.length > 0 ? sorted[0][0] : 'Not sure!';
   };
 
   if (numberSets.length === 0) return null;
 
+  const currentSet = numberSets[currentRound];
+
+  // Fill up to 16 cells, extra cells are empty
+  const numbersToShow = [...currentSet];
+  while (numbersToShow.length < TOTAL_CELLS) {
+    numbersToShow.push(null);
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Round {currentRound + 1}</Text>
       <Text style={styles.question}>Is your number in this list?</Text>
 
-      {/* Display Grid of Numbers */}
       <View style={styles.gridContainer}>
-        {numberSets[currentRound].map((number, index) => (
-          <Animated.View
-            key={number}
-            style={[
-              styles.numberBox,
-              { opacity: fadeAnim[index], transform: [{ scale: fadeAnim[index] }] },
-            ]}
-          >
-            <TouchableOpacity
-              style={styles.numberBoxContent}
-              onPress={() => {
-                if (animationCompleted) {
-                  // Handle the logic for user selecting a number
-                  handleAnswer(true); // Or false based on user input
-                }
-              }}
-            >
-              <Text style={styles.number}>{number}</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        ))}
+        {Array(ROWS)
+          .fill(0)
+          .map((_, rowIndex) => (
+            <View key={rowIndex} style={styles.row}>
+              {Array(COLS)
+                .fill(0)
+                .map((_, colIndex) => {
+                  const index = rowIndex * COLS + colIndex;
+                  const number = numbersToShow[index];
+                  const opacity = fadeAnim[index];
+
+                  return (
+                    <Animated.View
+                      key={colIndex}
+                      style={[
+                        styles.numberBox,
+                        {
+                          opacity: number === null ? 0 : opacity,
+                          transform: [{ scale: opacity }],
+                        },
+                      ]}
+                    >
+                      <Text style={styles.number}>{number !== null ? number : ''}</Text>
+                    </Animated.View>
+                  );
+                })}
+            </View>
+          ))}
       </View>
 
-      {/* Disable the buttons until animation is complete */}
       {animationCompleted && (
         <View style={styles.buttonRow}>
           <Button title="Yes" onPress={() => handleAnswer(true)} />
@@ -114,7 +146,7 @@ const GameScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f4ff',
+    backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -122,42 +154,42 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    marginBottom: 30,
-    color: '#333',
+    marginBottom: 20,
+    color: '#fff',
   },
   question: {
-    fontSize: 22,
+    fontSize: 20,
+    color: '#fff',
     marginBottom: 30,
-    color: '#222',
   },
   gridContainer: {
+    width: '90%',
+  },
+  row: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    marginBottom: 20,
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
   numberBox: {
-    width: 50,
-    height: 50,
+    width: '22%',
+    aspectRatio: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    margin: 5,
-    backgroundColor: '#4CAF50',
-    borderRadius: 5,
-  },
-  numberBoxContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 3,
+    borderColor: '#ccc',
   },
   number: {
-    fontSize: 18,
-    color: '#fff',
+    fontSize: 20,
     fontWeight: 'bold',
+    color: '#000',
   },
   buttonRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '60%',
+    marginTop: 20,
   },
 });
 
